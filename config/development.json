@@ -1,0 +1,15 @@
+{
+  "environment": "development",
+  "version": "0.0.1",
+  "buildDate": "NOW",
+  "buildSHA": "4-8-15-16-23-42",
+  "name": "eco-os-federation-service",
+  "serviceId": "012",
+  "server": {
+    "port": "8015"
+  },
+  "mongo": {
+    "db": "secondlock",
+    "collection": "federation"
+  }
+}
