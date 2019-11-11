@@ -17,8 +17,17 @@
 
 
 
-export * from "./Heartbeat";
-export * from "./Metrics";
-export * from "./Federation";
-export * from "./LicenseBeat";
-export * from "./InternalConfig";
+export class StaticFederationUtils {
+  public static buildKeyChunks(key: string): Array<string> {
+    const chunks: Array<string> = [];
+    const part = 250;
+    let counter = 0;
+
+    while (counter < key.length) {
+      chunks.push(key.substr(counter, part));
+      counter += part;
+    }
+
+    return chunks;
+  }
+}

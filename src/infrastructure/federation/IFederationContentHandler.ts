@@ -17,8 +17,9 @@
 
 
 
-export * from "./Heartbeat";
-export * from "./Metrics";
-export * from "./Federation";
-export * from "./LicenseBeat";
-export * from "./InternalConfig";
+import { MsContent } from "@symlinkde/eco-os-pk-models";
+
+export interface IFederationContentHandler {
+  handleIncomingContent(content: MsContent.IContent): Promise<any>;
+  handleIncomingContentRequest(checksum: string, domain: string): Promise<any>;
+}

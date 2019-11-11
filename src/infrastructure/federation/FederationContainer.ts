@@ -28,6 +28,8 @@ import { IFederationStorage } from "./IFederationStorage";
 import { FederationStorage } from "./FederationStorage";
 import { IFederationValidator } from "./IFederationValidator";
 import { FederationValidator } from "./FederationValidator";
+import { IFederationContentHandler } from "./IFederationContentHandler";
+import { FederationContentHandler } from "./FederationContentHandler";
 
 const federationContainer = new Container();
 
@@ -50,4 +52,8 @@ federationContainer
   })
   .inRequestScope();
 
+federationContainer
+  .bind<IFederationContentHandler>(FEDERATIONTYPES.IFederationContentHandler)
+  .to(FederationContentHandler)
+  .inRequestScope();
 export { federationContainer };

@@ -18,9 +18,12 @@
 
 
 import dns from "dns";
+import { MsContent, MsFederation } from "@symlinkde/eco-os-pk-models";
 
 export interface IFederationService {
   resolve2ndLock(domain: string): Promise<dns.SrvRecord[] | null>;
   processFederationFromPublicFederationService(domain: string): Promise<any>;
   resolveRemoteUserKeys(domain: string): Promise<any>;
+  postRemoteContent(content: MsFederation.IFederationPostObject, isCommunitySystem: boolean): Promise<any>;
+  getRemoteContent(checksum: string, domain: string): Promise<any>;
 }

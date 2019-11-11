@@ -20,16 +20,32 @@
 import { IFederationEncryptor } from "./IFederationEncryptor";
 import * as forge from "node-forge";
 import { injectable } from "inversify";
+import { Log, LogLevel } from "@symlinkde/eco-os-pk-log";
 
 @injectable()
 class FederationEncryptor implements IFederationEncryptor {
-  public async encryptBody(publicKeyPem: string, body: any): Promise<object> {
-    const key: any = forge.pki.publicKeyFromPem(forge.util.decode64(publicKeyPem));
+  public async encryptBody<T>(publicKeyPem: string, body: any): Promise<T> {
+    return new Promise((resolve) => {
+      try {
+        const key: any = forge.pki.publicKeyFromPem(forge.util.decode64(publicKeyPem));
 
-    Object.keys(body).map((entry: any) => {
-      body[entry] = forge.util.encode64(key.encrypt(forge.util.encode64(body[entry]), "RSA-OAEP", { md: forge.md.sha512.create() }));
+        Object.keys(body).map((entry: any) => {
+          if (body[entry] !== null) {
+            if (Array.isArray(body[entry])) {
+              body[entry].map((v: any, i: number) => {
+                body[entry][i] = forge.util.encode64(key.encrypt(forge.util.encode64(body[entry][i]), "RSA-OAEP", { md: forge.md.sha512.create() }));
+              });
+            } else {
+              body[entry] = forge.util.encode64(key.encrypt(forge.util.encode64(body[entry]), "RSA-OAEP", { md: forge.md.sha512.create() }));
+            }
+          }
+        });
+        resolve(body);
+      } catch (err) {
+        Log.log(err, LogLevel.error);
+        throw new Error(err);
+      }
     });
-    return body;
   }
 }
 

@@ -44,6 +44,11 @@ export class FederationRoute extends AbstractRoutes implements PkApi.IRoute {
     domain: "",
   };
 
+  private getContentFromTargetDomainValidator: PkApi.IValidatorPattern = {
+    checksum: "",
+    domain: "",
+  };
+
   constructor(app: Application) {
     super(app);
     this.activate();
@@ -55,6 +60,11 @@ export class FederationRoute extends AbstractRoutes implements PkApi.IRoute {
     this.validateFederationRequest();
     this.getUsersKeys();
     this.initFederationForDomain();
+    this.postContentToTargetDomain();
+    this.getContentFromTargetDomain();
+    this.deliverRemoteContent();
+    this.recieveRemoteContent();
+    this.postContentToTargetDomainAsCommunitySystem();
   }
 
   private resolveDns(): void {
@@ -127,6 +137,82 @@ export class FederationRoute extends AbstractRoutes implements PkApi.IRoute {
         this.validatorService.validate(req.body, this.postInitFederationPattern);
         this.federationController
           .initFederation(req)
+          .then((result) => {
+            res.send(result);
+          })
+          .catch((err) => {
+            next(err);
+          });
+      });
+  }
+
+  private postContentToTargetDomain(): void {
+    this.getApp()
+      .route("/federation/content")
+      .post((req: Request, res: Response, next: NextFunction) => {
+        this.federationController
+          .postContentToTargetDomain(req, false)
+          .then((result) => {
+            res.send(result);
+          })
+          .catch((err) => {
+            next(err);
+          });
+      });
+  }
+
+  private postContentToTargetDomainAsCommunitySystem(): void {
+    this.getApp()
+      .route("/federation/content/community")
+      .post((req: Request, res: Response, next: NextFunction) => {
+        this.federationController
+          .postContentToTargetDomain(req, true)
+          .then((result) => {
+            res.send(result);
+          })
+          .catch((err) => {
+            next(err);
+          });
+      });
+  }
+
+  private getContentFromTargetDomain(): void {
+    this.getApp()
+      .route("/federation/content/request")
+      .post((req: Request, res: Response, next: NextFunction) => {
+        this.validatorService.validate(req.body, this.getContentFromTargetDomainValidator);
+        this.federationController
+          .requestRemoteContent(req)
+          .then((result) => {
+            res.send(result);
+          })
+          .catch((err) => {
+            next(err);
+          });
+      });
+  }
+
+  private recieveRemoteContent(): void {
+    this.getApp()
+      .route("/federation/remote/content")
+      .post((req: Request, res: Response, next: NextFunction) => {
+        this.federationController
+          .receiveRemoteContent(req)
+          .then(() => {
+            res.sendStatus(200);
+          })
+          .catch((err) => {
+            next(err);
+          });
+      });
+  }
+
+  private deliverRemoteContent(): void {
+    this.getApp()
+      .route("/federation/remote/deliver")
+      .post((req: Request, res: Response, next: NextFunction) => {
+        this.federationController
+          .deliverRemoteContent(req)
           .then((result) => {
             res.send(result);
           })

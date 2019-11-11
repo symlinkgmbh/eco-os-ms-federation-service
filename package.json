@@ -15,7 +15,7 @@
     "test:integration:enterprise": "yarn run jest --json --outputFile=test_integration.json --passWithNoTests --detectOpenHandles ./__integration__/enterprise",
     "test:integration:paranoid": "yarn run jest --json --outputFile=test_integration.json --passWithNoTests --detectOpenHandles ./__integration__/paranoid",
     "test:integration:noncommercial": "yarn run jest --json --outputFile=test_integration.json --passWithNoTests --detectOpenHandles ./__integration__/non_commercial",
-    "build": "yarn clean && yarn tsc && yarn gulp compile:hard && yarn gulp inject:license"
+    "build": "yarn clean && yarn tsc && yarn gulp copy:worker && yarn gulp compile:hard && yarn gulp inject:license"
   },
   "devDependencies": {
     "@types/config": "^0.0.34",
@@ -29,6 +29,7 @@
     "gulp-debug": "^4.0.0",
     "gulp-flatmap": "^1.0.2",
     "gulp-inject-string": "^1.1.2",
+    "gulp-replace": "^1.0.0",
     "husky": "^3.0.0",
     "jest": "^24.8.0",
     "mustache": "^3.0.1",

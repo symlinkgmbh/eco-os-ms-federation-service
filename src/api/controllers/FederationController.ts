@@ -17,17 +17,21 @@
 
 
 
-import { injectFederationService, IFederationService, injectFederationValidator } from "../../infrastructure/federation";
+import { injectFederationService, IFederationService, injectFederationValidator, injectFederationContentHandler } from "../../infrastructure/federation";
 import { Request } from "express";
 import { RestError } from "@symlinkde/eco-os-pk-api";
 import { SrvRecord } from "dns";
 import { IFederationValidator } from "../../infrastructure/federation/IFederationValidator";
+import { MsContent, MsFederation } from "@symlinkde/eco-os-pk-models";
+import { IFederationContentHandler } from "../../infrastructure/federation/IFederationContentHandler";
 
 @injectFederationService
 @injectFederationValidator
+@injectFederationContentHandler
 export class FederationController {
   private federationService!: IFederationService;
   private federationValidator!: IFederationValidator;
+  private federationContentHandler!: IFederationContentHandler;
 
   public async resolve2ndLock(req: Request): Promise<SrvRecord[]> {
     const result = await this.federationService.resolve2ndLock(req.body.domain);
@@ -52,5 +56,23 @@ export class FederationController {
 
   public async getUserKeys(req: Request): Promise<any> {
     return await this.federationValidator.getUserInformation(req.body.email, req.body.domain);
+  }
+
+  public async postContentToTargetDomain(req: Request, isCommunitySystem: boolean): Promise<any> {
+    return await this.federationService.postRemoteContent(req.body as MsFederation.IFederationPostObject, isCommunitySystem);
+  }
+
+  public async receiveRemoteContent(req: Request): Promise<any> {
+    return await this.federationContentHandler.handleIncomingContent(req.body as MsContent.IContent);
+  }
+
+  public async deliverRemoteContent(req: Request): Promise<any> {
+    const { checksum, domain } = req.body;
+    return await this.federationContentHandler.handleIncomingContentRequest(checksum, domain);
+  }
+
+  public async requestRemoteContent(req: Request): Promise<any> {
+    const { checksum, domain } = req.body;
+    return await this.federationService.getRemoteContent(checksum, domain);
   }
 }

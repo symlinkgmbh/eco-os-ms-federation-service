@@ -6,6 +6,7 @@ const inject = require("gulp-inject-string");
 const fs = require("fs");
 const util = require("util");
 const mustache = require("mustache");
+const replace = require("gulp-replace");
 
 const readFile = util.promisify(fs.readFile);
 
@@ -35,10 +36,15 @@ async function loadReadmeTemplate() {
   }
 }
 
+gulp.task("copy:worker", () => {
+  return gulp.src("./src/infrastructure/worker/DecryptionWorker.js").pipe(gulp.dest("./lib/infrastructure/worker"));
+});
+
 gulp.task("compile:hard", () => {
   return gulp
     .src("./lib/**/*.js", { base: "./" })
     .pipe(debug())
+    .pipe(replace("./src/infrastructure/worker/DecryptionWorker.js", "./lib/infrastructure/worker/DecryptionWorker.js"))
     .pipe(
       flatMap(function(stream, file) {
         return stream.pipe(

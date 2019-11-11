@@ -19,3 +19,4 @@
 
 export { injectFederationService } from "./FederationDecorator";
 export { injectFederationValidator } from "./FederationValidatorDecorator";
+export { injectFederationContentHandler } from "./FederationContentHandlerDecorator";

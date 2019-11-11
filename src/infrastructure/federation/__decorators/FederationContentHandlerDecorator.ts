@@ -17,8 +17,16 @@
 
 
 
-export * from "./Heartbeat";
-export * from "./Metrics";
-export * from "./Federation";
-export * from "./LicenseBeat";
-export * from "./InternalConfig";
+import { federationContainer } from "../FederationContainer";
+import { FEDERATIONTYPES } from "../FederationTypes";
+import { IFederationContentHandler } from "../IFederationContentHandler";
+
+// tslint:disable-next-line:typedef
+function injectFederationContentHandler<T extends new (...args: any[]) => {}>(constructor: T) {
+  return class extends constructor {
+    // tslint:disable-next-line:member-access
+    federationContentHandler: IFederationContentHandler = federationContainer.get<IFederationContentHandler>(FEDERATIONTYPES.IFederationContentHandler);
+  };
+}
+
+export { injectFederationContentHandler };

@@ -18,5 +18,5 @@
 
 
 export interface IFederationEncryptor {
-  encryptBody(publicKey: string, body: object): Promise<object>;
+  encryptBody<T>(publicKey: string, body: object): Promise<T>;
 }

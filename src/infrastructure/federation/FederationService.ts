@@ -29,6 +29,8 @@ import { IFederationEncryptor } from "./IFederationEncryptor";
 import { FEDERATIONTYPES } from "./FederationTypes";
 import { CryptionUtils } from "@symlinkde/eco-os-pk-crypt";
 import { IFederationStorage } from "./IFederationStorage";
+import { StaticFederationUtils } from "./StaticFederationUtils";
+import Config from "config";
 
 @injectLicenseClient
 @injectConfigClient
@@ -48,6 +50,10 @@ export class FederationService implements IFederationService {
     this.storage = storage;
   }
 
+  /**
+   * Perform DNS SRV query against the target domain
+   * @param domain string
+   */
   public async resolve2ndLock(domain: string): Promise<dns.SrvRecord[] | null> {
     return new Promise((resolve) => {
       dns.resolveSrv(`_2ndlock._tcp.${domain}`, (err, res) => {
@@ -59,11 +65,14 @@ export class FederationService implements IFederationService {
     });
   }
 
+  /**
+   * Try to load all public keys from remote user
+   * @param email string
+   */
   public async resolveRemoteUserKeys(email: string): Promise<any> {
     const domain = email.split("@")[1];
     Log.log(`prepare federation for ${domain}`, LogLevel.info);
     const federationObject: any = await this.processFederationFromPublicFederationService(domain);
-    // tslint:disable-next-line:forin
     for (const index in federationObject) {
       if (federationObject[index].publickey === undefined || federationObject[index].publickey === "") {
         throw new CustomRestError(
@@ -90,12 +99,15 @@ export class FederationService implements IFederationService {
     }
   }
 
+  /**
+   * Try to load public federation information from 2ndLock public license service
+   * @param domain string
+   */
   public async processFederationFromPublicFederationService(domain: string): Promise<MsFederation.IFederationStorageObject[] | MsFederation.IFederationStorageObject> {
     const storedStorageObject = await this.storage.get(domain);
     if (storedStorageObject.length === 0) {
       const result = await this.loadFederationRemoteInformation(domain);
       const storageObject = await this.parseFederationPublicResponse(result);
-      // tslint:disable-next-line:forin
       for (const index in storageObject) {
         await this.storage.set(domain, storageObject[index]);
       }
@@ -105,25 +117,198 @@ export class FederationService implements IFederationService {
     }
   }
 
-  private async parseFederationPublicResponse(response: any): Promise<Array<MsFederation.IFederationStorageObject>> {
+  // tslint:disable-next-line:cyclomatic-complexity
+  public async postRemoteContent(content: MsFederation.IFederationPostObject, isCommunitySystem: boolean): Promise<any> {
+    if (content.domain === undefined) {
+      throw new CustomRestError(
+        {
+          code: 400,
+          message: "missing domain in content object",
+        },
+        400,
+      );
+    }
+    const federationObject: any = await this.processFederationFromPublicFederationService(content.domain);
+    // TODO: CODE DUPLICATION - CLEAN THIS UP
+    for (const index in federationObject) {
+      if (federationObject[index].publickey === undefined || federationObject[index].publickey === "") {
+        throw new CustomRestError(
+          {
+            code: 400,
+            message: "federation not possible due missing public key from receipient service",
+          },
+          400,
+        );
+      }
+
+      if (federationObject[index].srv.length < 1) {
+        throw new CustomRestError(
+          {
+            code: 400,
+            message: "federation not possible due missing dns srv entry for 2ndLock in target domain",
+          },
+          400,
+        );
+      }
+
+      let contentObj: any;
+      if (isCommunitySystem) {
+        contentObj = { ...content };
+        contentObj.key = StaticFederationUtils.buildKeyChunks(contentObj.key);
+      } else {
+        contentObj = { ...content };
+        contentObj.key = "";
+      }
+
+      const cryptedFederationObject: any = await this.encryptor.encryptBody<MsFederation.IFederationPostObject>(federationObject[index].publickey, {
+        checksum: contentObj.checksum,
+        key: contentObj.key,
+        domain: contentObj.domain,
+        sendingDomain: contentObj.sendingDomain,
+        liveTime: contentObj.liveTime === undefined ? null : content.liveTime,
+        maxOpen: contentObj.maxOpen === undefined ? null : content.maxOpen,
+      });
+      const cryptedFederationChecksum: any = CryptionUtils.buildChecksumFromBody(cryptedFederationObject);
+
+      const target = federationObject[index].srv[0].name + ":" + federationObject[index].srv[0].port;
+
+      Log.log(`try post content to ${target}`, LogLevel.info);
+      Log.log(`fed checkusm ${cryptedFederationChecksum}`, LogLevel.info);
+      Log.log("payload:", LogLevel.info);
+      Log.log(cryptedFederationObject, LogLevel.info);
+
+      // TODO: Validation of posting object
+      try {
+        const result = await Axios.post(
+          `${Config.get("fed_flag")}://${target}/api/v1/federation/content`,
+          {
+            checksum: cryptedFederationObject.checksum,
+            key: cryptedFederationObject.key,
+            domain: cryptedFederationObject.domain,
+            sendingDomain: cryptedFederationObject.sendingDomain,
+            liveTime: cryptedFederationObject.liveTime,
+            maxOpen: cryptedFederationObject.maxOpen,
+          },
+          {
+            headers: {
+              "X-Federation-Checksum": cryptedFederationChecksum,
+              "Content-Type": "application/json",
+            },
+            timeout: parseInt(Config.get("fed_timeout"), 10),
+          },
+        );
+        return result.data;
+      } catch (err) {
+        Log.log(err, LogLevel.error);
+        throw new CustomRestError(
+          {
+            code: 400,
+            message: "can´t post content",
+          },
+          400,
+        );
+      }
+    }
+  }
+
+  public async getRemoteContent(checksum: string, domain: string): Promise<any> {
+    const federationObject: any = await this.processFederationFromPublicFederationService(domain);
+    // TODO: CODE DUPLICATION - CLEAN THIS UP
+    for (const index in federationObject) {
+      if (federationObject[index].publickey === undefined || federationObject[index].publickey === "") {
+        throw new CustomRestError(
+          {
+            code: 400,
+            message: "federation not possible due missing public key from receipient service",
+          },
+          400,
+        );
+      }
+
+      if (federationObject[index].srv.length < 1) {
+        throw new CustomRestError(
+          {
+            code: 400,
+            message: "federation not possible due missing dns srv entry for 2ndLock in target domain",
+          },
+          400,
+        );
+      }
+
+      const cryptedRequestObj: any = await this.encryptor.encryptBody(federationObject[index].publickey, { checksum, domain });
+
+      const cryptedFederationChecksum: any = CryptionUtils.buildChecksumFromBody(cryptedRequestObj);
+      const target = federationObject[index].srv[0].name + ":" + federationObject[index].srv[0].port;
+
+      try {
+        const result = await Axios.post(
+          `${Config.get("fed_flag")}://${target}/api/v1/federation/deliver`,
+          {
+            checksum: cryptedRequestObj.checksum,
+            domain: cryptedRequestObj.domain,
+          },
+          {
+            headers: {
+              "X-Federation-Checksum": cryptedFederationChecksum,
+              "Content-Type": "application/json",
+            },
+            timeout: parseInt(Config.get("fed_timeout"), 10),
+          },
+        );
+        return result.data;
+      } catch (err) {
+        Log.log(err, LogLevel.error);
+        throw new CustomRestError(
+          {
+            code: 400,
+            message: "can´t request content",
+          },
+          400,
+        );
+      }
+    }
+    return;
+  }
+
+  /**
+   * Try to parse response from 2ndLock public license service
+   * @param response AxiosResponse
+   */
+  private async parseFederationPublicResponse(response: AxiosResponse): Promise<Array<MsFederation.IFederationStorageObject>> {
     const parsedResult: Array<MsFederation.IFederationStorageObject> = [];
     for (const index in response.data) {
-      // tslint:disable-next-line: forin
       for (const dIndex in response.data[index]) {
-        const dnsLookupResult = await this.resolve2ndLock(response.data[index][dIndex].domain);
-        if (dnsLookupResult !== null) {
-          parsedResult.push({
-            domain: response.data[index][dIndex].domain,
-            created: String(new Date().getTime()),
-            publickey: response.data[index][dIndex].publicKey,
-            srv: dnsLookupResult,
-          });
+        if (response.data[index][dIndex].domain === "community.2ndlock.org") {
+          const dnsLookupResult = await this.resolve2ndLock("2ndlock.org");
+          if (dnsLookupResult !== null) {
+            parsedResult.push({
+              domain: response.data[index][dIndex].domain,
+              created: String(new Date().getTime()),
+              publickey: response.data[index][dIndex].publicKey,
+              srv: dnsLookupResult,
+            });
+          }
+        } else {
+          const dnsLookupResult = await this.resolve2ndLock(response.data[index][dIndex].domain);
+          if (dnsLookupResult !== null) {
+            parsedResult.push({
+              domain: response.data[index][dIndex].domain,
+              created: String(new Date().getTime()),
+              publickey: response.data[index][dIndex].publicKey,
+              srv: dnsLookupResult,
+            });
+          }
         }
       }
     }
 
     return parsedResult;
   }
+
+  /**
+   * Load URL from 2ndLock public license service from internal configuration service.
+   * Change this property if you like to host your own key/license service.
+   */
   private async loadFederationHost(): Promise<MsConf.IFederationConfig> {
     if (!this.publicFederationHost) {
       const loadConf = await this.configClient.get("federation");
@@ -133,6 +318,9 @@ export class FederationService implements IFederationService {
     return this.publicFederationHost;
   }
 
+  /**
+   * Load checksum from internal license service
+   */
   private async loadLicenseChecksum(): Promise<string> {
     if (!this.licenseChecksum) {
       const result = await this.licenseClient.getChecksumFromLicense();
@@ -142,15 +330,19 @@ export class FederationService implements IFederationService {
     return this.licenseChecksum;
   }
 
+  /**
+   * Load public license key from internal license service
+   */
   private async loadPublicKeyFromFederationService(): Promise<string> {
     try {
       const checksum = await this.loadLicenseChecksum();
       const host = await this.loadFederationHost();
-      const result = await Axios.get(`${host.publicFederationSerivce}/api/v1/publickey`, {
+      const result = await Axios.get(`https://${host.publicFederationSerivce}/api/v1/publickey`, {
         headers: {
           "Content-Type": "application/json",
           "X-Auth-Key": `${checksum}`,
         },
+        timeout: parseInt(Config.get("fed_timeout"), 10),
       });
 
       return result.data.publickey;
@@ -166,19 +358,24 @@ export class FederationService implements IFederationService {
     }
   }
 
+  /**
+   * Initialize federation handshake to target domain
+   * @param domain string
+   */
   private async loadFederationRemoteInformation(domain: string): Promise<AxiosResponse> {
     try {
       const publicKey = await this.loadPublicKeyFromFederationService();
       const checksum = await this.loadLicenseChecksum();
       const host = await this.loadFederationHost();
-      const requestBody = await this.encryptor.encryptBody(publicKey, { domain });
+      const requestBody = await this.encryptor.encryptBody<any>(publicKey, { domain });
       const bodyChecksum = CryptionUtils.buildChecksumFromBody(requestBody);
-      return await Axios.post(`${host.publicFederationSerivce}/api/v1/federation`, requestBody, {
+      return await Axios.post(`https://${host.publicFederationSerivce}/api/v1/federation`, requestBody, {
         headers: {
           "Content-Type": "application/json",
           "X-Auth-Key": `${checksum}`,
           "X-Auth-Checksum": `${bodyChecksum}`,
         },
+        timeout: parseInt(Config.get("fed_timeout"), 10),
       });
     } catch (err) {
       Log.log(err, LogLevel.error);
@@ -192,6 +389,13 @@ export class FederationService implements IFederationService {
     }
   }
 
+  /**
+   * Federation request to load remote user public keys
+   * @param publicFederationKey string
+   * @param email string
+   * @param domain string
+   * @param target string
+   */
   private async federationRequest(publicFederationKey: string, email: string, domain: string, target: string): Promise<AxiosResponse> {
     const requestObject = {
       encryptedEmail: email,
@@ -202,7 +406,7 @@ export class FederationService implements IFederationService {
     const cryptedFederationChecksum = CryptionUtils.buildChecksumFromBody(cryptedFederationObject);
     try {
       return await Axios.post(
-        `http://${target}/api/v1/federation/user`,
+        `${Config.get("fed_flag")}://${target}/api/v1/federation/user`,
         {
           encryptedEmail: cryptedFederationObject.encryptedEmail,
           encryptedDomain: cryptedFederationObject.encryptedDomain,
@@ -212,6 +416,7 @@ export class FederationService implements IFederationService {
             "X-Federation-Checksum": cryptedFederationChecksum,
             "Content-Type": "application/json",
           },
+          timeout: parseInt(Config.get("fed_timeout"), 10),
         },
       );
     } catch (err) {

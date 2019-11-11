@@ -51,7 +51,7 @@ class FederationValidator implements IFederationValidator {
     const key = await this.loadPrivateKeyFromLicenseService();
     const privateKey: any = forge.pki.privateKeyFromPem(forge.util.decode64(key));
 
-    const decryptedEmail = this.decryptedEmail(email, privateKey);
+    const decryptedEmail = await this.decryptedEmail(email, privateKey);
     // const decryptedDomain = this.decryptedDomain(domain, privateKey);
 
     try {
@@ -77,23 +77,26 @@ class FederationValidator implements IFederationValidator {
     return this.privateLicenseKey;
   }
 
-  private decryptedEmail(email: string, privateKey: any): string {
-    try {
-      return forge.util.decode64(
-        privateKey.decrypt(forge.util.decode64(email), "RSA-OAEP", {
-          md: forge.md.sha512.create(),
-        }),
-      );
-    } catch (err) {
-      Log.log(err, LogLevel.error);
-      throw new CustomRestError(
-        {
-          code: 400,
-          message: "can't decrypt email",
-        },
-        400,
-      );
-    }
+  private async decryptedEmail(email: string, privateKey: any): Promise<string> {
+    return new Promise((resolve) => {
+      try {
+        const decryptedEmail = forge.util.decode64(
+          privateKey.decrypt(forge.util.decode64(email), "RSA-OAEP", {
+            md: forge.md.sha512.create(),
+          }),
+        );
+        resolve(decryptedEmail);
+      } catch (err) {
+        Log.log(err, LogLevel.error);
+        throw new CustomRestError(
+          {
+            code: 400,
+            message: "can't decrypt email",
+          },
+          400,
+        );
+      }
+    });
   }
 
   private decryptedDomain(domain: string, privateKey: any): string {
