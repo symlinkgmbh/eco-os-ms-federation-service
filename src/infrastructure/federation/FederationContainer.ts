@@ -20,10 +20,8 @@
 import "reflect-metadata";
 import { Container } from "inversify";
 import { IFederationService } from "./IFederationService";
-import { IFederationEncryptor } from "./IFederationEncryptor";
 import { FEDERATIONTYPES } from "./FederationTypes";
 import { FederationService } from "./FederationService";
-import { FederationEncryptor } from "./FederationEncryptor";
 import { IFederationStorage } from "./IFederationStorage";
 import { FederationStorage } from "./FederationStorage";
 import { IFederationValidator } from "./IFederationValidator";
@@ -33,10 +31,6 @@ import { FederationContentHandler } from "./FederationContentHandler";
 
 const federationContainer = new Container();
 
-federationContainer
-  .bind<IFederationEncryptor>(FEDERATIONTYPES.IFederationEncryptor)
-  .to(FederationEncryptor)
-  .inTransientScope();
 federationContainer
   .bind<IFederationStorage>(FEDERATIONTYPES.IFederationStorage)
   .to(FederationStorage)
@@ -48,7 +42,7 @@ federationContainer
 federationContainer
   .bind<IFederationService>(FEDERATIONTYPES.IFederationService)
   .toDynamicValue(() => {
-    return new FederationService(federationContainer.get<IFederationEncryptor>(FEDERATIONTYPES.IFederationEncryptor), federationContainer.get<IFederationStorage>(FEDERATIONTYPES.IFederationStorage));
+    return new FederationService(federationContainer.get<IFederationStorage>(FEDERATIONTYPES.IFederationStorage));
   })
   .inRequestScope();
 

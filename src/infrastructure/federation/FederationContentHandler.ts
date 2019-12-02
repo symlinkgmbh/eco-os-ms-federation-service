@@ -18,13 +18,13 @@
 
 
 import { IFederationContentHandler } from "./IFederationContentHandler";
-import { MsContent, PkCore, MsFederation } from "@symlinkde/eco-os-pk-models";
+import { PkCore, MsFederation, PkCrypt } from "@symlinkde/eco-os-pk-models";
 import { injectable } from "inversify";
 import { injectLicenseClient, injectContentClient } from "@symlinkde/eco-os-pk-core";
 import * as forge from "node-forge";
 import { CustomRestError } from "@symlinkde/eco-os-pk-api";
 import { Log, LogLevel } from "@symlinkde/eco-os-pk-log";
-import { Worker } from "worker_threads";
+import { CryptoWorker } from "@symlinkde/eco-os-pk-crypt";
 
 @injectContentClient
 @injectLicenseClient
@@ -33,6 +33,11 @@ export class FederationContentHandler implements IFederationContentHandler {
   private licenseClient!: PkCore.IEcoLicenseClient;
   private contentClient!: PkCore.IEcoContentClient;
   private privateLicenseKey!: string;
+  private cryptoWorker: PkCrypt.ICryptoWorker;
+
+  public constructor() {
+    this.cryptoWorker = new CryptoWorker();
+  }
 
   /**
    * Process incoming, encrypted post content sig.
@@ -40,15 +45,12 @@ export class FederationContentHandler implements IFederationContentHandler {
    */
   public async handleIncomingContent(content: MsFederation.IFederationPostObject): Promise<any> {
     await this.loadPrivateKeyFromLicenseService();
-    const decrypted = await this.decryptInconmingContent(content);
+    const decrypted = await this.cryptoWorker.decryptBody<MsFederation.IFederationPostObject>(content, this.privateLicenseKey);
 
     if (Array.isArray(decrypted.key)) {
       decrypted.key = decrypted.key.join("");
     }
 
-    Log.log("handle incoming federation object", LogLevel.info);
-    Log.log("payload", LogLevel.info);
-    Log.log(decrypted, LogLevel.info);
     decrypted.domain = decrypted.sendingDomain;
 
     try {
@@ -83,43 +85,6 @@ export class FederationContentHandler implements IFederationContentHandler {
         400,
       );
     }
-  }
-
-  private async decryptInconmingContent(content: any): Promise<MsFederation.IFederationPostObject> {
-    return new Promise((resolve) => {
-      try {
-        const decryptionWorker = new Worker("./src/infrastructure/worker/DecryptionWorker.js", {
-          workerData: {
-            privatekey: this.privateLicenseKey,
-            content,
-          },
-        });
-
-        decryptionWorker.on("message", (result) => {
-          resolve(result);
-        });
-
-        decryptionWorker.on("error", (err) => {
-          Log.log(err, LogLevel.error);
-          throw new CustomRestError(
-            {
-              code: 400,
-              message: "Decryption for federation content object failed",
-            },
-            400,
-          );
-        });
-      } catch (err) {
-        Log.log(err, LogLevel.error);
-        throw new CustomRestError(
-          {
-            code: 400,
-            message: "Decryption for federation content object failed",
-          },
-          400,
-        );
-      }
-    });
   }
 
   private async loadPrivateKeyFromLicenseService(): Promise<string> {
